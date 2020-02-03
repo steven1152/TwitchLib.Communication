@@ -18,6 +18,7 @@ namespace TwitchLib.Communication.Clients
         public int SendQueueLength => _throttlers.SendQueue.Count;
         public int WhisperQueueLength => _throttlers.WhisperQueue.Count;
         public bool IsConnected => Client?.State == WebSocketState.Open;
+        public bool IsReady { get; private set; }
         public IClientOptions Options { get; }
         public ClientWebSocket Client { get; private set; }
 
@@ -40,10 +41,12 @@ namespace TwitchLib.Communication.Clients
         private bool _networkServicesRunning;
         private Task[] _networkTasks;
         private Task _monitorTask;
-        
-        public WebSocketClient(IClientOptions options = null)
+        private System.Net.IWebProxy _proxy;
+
+        public WebSocketClient(IClientOptions options = null, System.Net.IWebProxy proxy = null)
         {
             Options = options ?? new ClientOptions();
+            _proxy = proxy;
 
             switch (Options.ClientType)
             {
@@ -64,6 +67,10 @@ namespace TwitchLib.Communication.Clients
         {
             Client?.Abort();
             Client = new ClientWebSocket();
+            if(_proxy != null)
+            {
+                Client.Options.Proxy = _proxy;
+            }
             
             if (_monitorTask == null)
             {
@@ -76,26 +83,19 @@ namespace TwitchLib.Communication.Clients
 
         public bool Open()
         {
-            try
-            {
-                if (IsConnected) return true;
+            if (IsConnected) return true;
 
-                InitializeClient();
-                Client.ConnectAsync(new Uri(Url), _tokenSource.Token).Wait(10000);
-                if (!IsConnected) return Open();
+            InitializeClient();
+            Client.ConnectAsync(new Uri(Url), _tokenSource.Token).Wait(10000);
+            if (!IsConnected) return Open();
                 
-                StartNetworkServices();
-                return true;
-            }
-            catch (WebSocketException)
-            {
-                InitializeClient();
-                return false;
-            }
+            StartNetworkServices();
+            return true;
         }
 
         public void Close(bool callDisconnect = true)
         {
+            IsReady = false;
             Client?.Abort();
             _stopServices = callDisconnect;
             CleanupServices();
@@ -106,8 +106,8 @@ namespace TwitchLib.Communication.Clients
         public void Reconnect()
         {
             Close();
-            Open();
-            OnReconnected?.Invoke(this, new OnReconnectedEventArgs());
+            //Open();
+            //OnReconnected?.Invoke(this, new OnReconnectedEventArgs());
         }
         
         public bool Send(string message)
@@ -192,6 +192,8 @@ namespace TwitchLib.Communication.Clients
                     }
 
                     if (result == null) continue;
+
+                    IsReady = true;
 
                     switch (result.MessageType)
                     {
