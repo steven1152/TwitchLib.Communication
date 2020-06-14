@@ -220,7 +220,7 @@ namespace TwitchLib.Communication.Clients
 
         private Task StartMonitorTask()
         {
-            return Task.Run(() =>
+            return Task.Run(async () =>
             {
                 var needsReconnect = false;
                 try
@@ -230,7 +230,8 @@ namespace TwitchLib.Communication.Clients
                     {
                         if (lastState == IsConnected)
                         {
-                            Thread.Sleep(200);
+                            await Task.Delay(200);
+                            //Thread.Sleep(200);
                             continue;
                         }
                         OnStateChanged?.Invoke(this, new OnStateChangedEventArgs { IsConnected = Client.State == WebSocketState.Open, WasConnected = lastState});
